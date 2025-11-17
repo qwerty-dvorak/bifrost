@@ -241,6 +241,16 @@ func (provider *HuggingFaceProvider) chatToTextStreamConverter(requestedModel, r
 						Text: &text,
 					},
 				}
+			} else if chatResp.Choices[i].ChatStreamResponseChoice != nil {
+				emptyText := ""
+				chatResp.Choices[i] = schemas.BifrostResponseChoice{
+					Index:        chatResp.Choices[i].Index,
+					FinishReason: chatResp.Choices[i].FinishReason,
+					LogProbs:     chatResp.Choices[i].LogProbs,
+					TextCompletionResponseChoice: &schemas.TextCompletionResponseChoice{
+						Text: &emptyText,
+					},
+				}
 			}
 		}
 
