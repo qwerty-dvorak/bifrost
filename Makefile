@@ -17,6 +17,7 @@ GOBIN ?= $(shell go env GOBIN)
 GOPATH ?= $(shell go env GOPATH)
 DEFAULT_GOBIN := $(if $(strip $(GOBIN)),$(GOBIN),$(if $(strip $(GOPATH)),$(GOPATH)/bin,))
 AIR_BIN ?= $(if $(strip $(DEFAULT_GOBIN)),$(DEFAULT_GOBIN)/air,air)
+GOTESTSUM_BIN := $(if $(strip $(DEFAULT_GOBIN)),$(DEFAULT_GOBIN)/gotestsum,$(shell which gotestsum 2>/dev/null || echo gotestsum))
 
 # Colors for output
 RED=$(shell printf '\033[0;31m')
@@ -96,8 +97,17 @@ install-air: ## Install air for hot reloading (if not already installed)
 	fi
 
 install-gotestsum: ## Install gotestsum for test reporting (if not already installed)
-	@which gotestsum > /dev/null || (echo "$(YELLOW)Installing gotestsum for test reporting...$(NC)" && go install gotest.tools/gotestsum@latest)
-	@echo "$(GREEN)gotestsum is ready$(NC)"
+	@if [ -x "$(GOTESTSUM_BIN)" ] || which $(GOTESTSUM_BIN) > /dev/null 2>&1; then \
+		echo "$(GREEN)gotestsum is available at: $(GOTESTSUM_BIN)$(NC)"; \
+	else \
+		echo "$(YELLOW)Installing gotestsum for test reporting...$(NC)"; \
+		go install gotest.tools/gotestsum@latest; \
+		INSTALLED=$$(if [ -n "$(GOBIN)" ]; then echo "$(GOBIN)/gotestsum"; elif [ -n "$(GOPATH)" ]; then echo "$(GOPATH)/bin/gotestsum"; else echo "$$(go env GOBIN)/gotestsum"; fi); \
+		echo "$(GREEN)gotestsum installed (expected path: $$INSTALLED)$(NC)"; \
+		if ! which $$INSTALLED >/dev/null 2>&1 && [ ! -x "$$INSTALLED" ]; then \
+			echo "$(YELLOW)Note: the installed gotestsum binary may not be on your PATH. Add its directory to PATH to run 'make test' without errors or run tests via $(GOTESTSUM_BIN)$(NC)"; \
+		fi; \
+	fi
 
 install-junit-viewer: ## Install junit-viewer for HTML report generation (if not already installed)
 	@if [ -z "$$CI" ] && [ -z "$$GITHUB_ACTIONS" ] && [ -z "$$GITLAB_CI" ] && [ -z "$$CIRCLECI" ] && [ -z "$$JENKINS_HOME" ]; then \
@@ -218,7 +228,7 @@ generate-html-reports: ## Convert existing XML reports to HTML
 test: install-gotestsum ## Run tests for bifrost-http
 	@echo "$(GREEN)Running bifrost-http tests...$(NC)"
 	@mkdir -p $(TEST_REPORTS_DIR)
-	@cd transports/bifrost-http && GOWORK=off gotestsum \
+	@cd transports/bifrost-http && GOWORK=off $(GOTESTSUM_BIN) \
 		--format=$(GOTESTSUM_FORMAT) \
 		--junitfile=../../$(TEST_REPORTS_DIR)/bifrost-http.xml \
 		-- -v ./...
@@ -270,7 +280,7 @@ test-core: install-gotestsum ## Run core tests (Usage: make test-core PROVIDER=o
 			CLEAN_TESTCASE=$$(echo "$$CLEAN_TESTCASE" | sed 's|^Test[A-Z][A-Za-z]*/[A-Z][A-Za-z]*Tests/||'); \
 			echo "$(CYAN)Running Test$${PROVIDER_TEST_NAME}/$${PROVIDER_TEST_NAME}Tests/$$CLEAN_TESTCASE...$(NC)"; \
 			REPORT_FILE="$(TEST_REPORTS_DIR)/core-$(PROVIDER)-$$(echo $$CLEAN_TESTCASE | sed 's|/|_|g').xml"; \
-			cd tests/core-providers && GOWORK=off gotestsum \
+			cd tests/core-providers && GOWORK=off $(GOTESTSUM_BIN) \
 				--format=$(GOTESTSUM_FORMAT) \
 				--junitfile=../../$$REPORT_FILE \
 				-- -v -run "^Test$${PROVIDER_TEST_NAME}$$/.*Tests/$$CLEAN_TESTCASE$$" || TEST_FAILED=1; \
@@ -294,7 +304,7 @@ test-core: install-gotestsum ## Run core tests (Usage: make test-core PROVIDER=o
 		else \
 			echo "$(CYAN)Running Test$${PROVIDER_TEST_NAME}...$(NC)"; \
 			REPORT_FILE="$(TEST_REPORTS_DIR)/core-$(PROVIDER).xml"; \
-			cd tests/core-providers && GOWORK=off gotestsum \
+			cd tests/core-providers && GOWORK=off $(GOTESTSUM_BIN) \
 				--format=$(GOTESTSUM_FORMAT) \
 				--junitfile=../../$$REPORT_FILE \
 				-- -v -run "^Test$${PROVIDER_TEST_NAME}$$" || TEST_FAILED=1; \
@@ -323,7 +333,7 @@ test-core: install-gotestsum ## Run core tests (Usage: make test-core PROVIDER=o
 			exit 1; \
 		fi; \
 		REPORT_FILE="$(TEST_REPORTS_DIR)/core-all.xml"; \
-		cd tests/core-providers && GOWORK=off gotestsum \
+		cd tests/core-providers && GOWORK=off $(GOTESTSUM_BIN) \
 			--format=$(GOTESTSUM_FORMAT) \
 			--junitfile=../../$$REPORT_FILE \
 			-- -v ./... || TEST_FAILED=1; \
@@ -417,7 +427,7 @@ test-plugins: install-gotestsum ## Run plugin tests
 		for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 			plugin_name=$$(echo $$dir | sed 's|^\./||' | sed 's|/|-|g'); \
 			echo "Testing $$dir..."; \
-			cd $$dir && gotestsum \
+			cd $$dir && $(GOTESTSUM_BIN) \
 				--format=$(GOTESTSUM_FORMAT) \
 				--junitfile=../../$(TEST_REPORTS_DIR)/plugin-$$plugin_name.xml \
 				-- -v ./... && cd - > /dev/null; \
