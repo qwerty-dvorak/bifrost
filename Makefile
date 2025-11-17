@@ -10,6 +10,13 @@ LOG_LEVEL ?= info
 TEST_REPORTS_DIR ?= test-reports
 GOTESTSUM_FORMAT ?= testname
 LOCAL ?=
+\
+# Detect where 'go install' will place binaries. Prefer GOBIN, then GOPATH/bin, then default to $(shell go env GOBIN) or $(shell go env GOPATH)/bin
+# Set AIR_BIN to that path plus '/air' so make can invoke it directly without relying on PATH.
+GOBIN ?= $(shell go env GOBIN)
+GOPATH ?= $(shell go env GOPATH)
+DEFAULT_GOBIN := $(if $(strip $(GOBIN)),$(GOBIN),$(if $(strip $(GOPATH)),$(GOPATH)/bin,))
+AIR_BIN ?= $(if $(strip $(DEFAULT_GOBIN)),$(DEFAULT_GOBIN)/air,air)
 
 # Colors for output
 RED=$(shell printf '\033[0;31m')
@@ -52,16 +59,41 @@ cleanup-enterprise: ## Clean up enterprise directories if present
 	@echo "$(GREEN)Enterprise cleaned up$(NC)"
 
 install-ui: cleanup-enterprise
+	# Do not run install-ui as root on developer machines - this causes global npm installs to fail (Nix, etc.)
+	@if [ -z "$$CI" ] && [ -z "$$GITHUB_ACTIONS" ] && [ "$$(id -u)" -eq 0 ]; then \
+		echo "$(RED)Error: Running 'make' as root is not supported for local development. Run as your user (without sudo).$(NC)"; \
+		exit 1; \
+	fi
 	@which node > /dev/null || (echo "$(RED)Error: Node.js is not installed. Please install Node.js first.$(NC)" && exit 1)
 	@which npm > /dev/null || (echo "$(RED)Error: npm is not installed. Please install npm first.$(NC)" && exit 1)
 	@echo "$(GREEN)Node.js and npm are installed$(NC)"
 	@cd ui && npm install
-	@which next > /dev/null || (echo "$(YELLOW)Installing nextjs...$(NC)" && npm install -g next)
+	# Prefer a local next installation (works on systems without global npm dirs, e.g. Nix)
+	@cd ui && \
+	if [ -x "./node_modules/.bin/next" ]; then \
+		echo "$(GREEN)next is available locally in ui/node_modules/.bin$(NC)"; \
+	elif which npx > /dev/null 2>&1; then \
+		echo "$(YELLOW)Installing next locally using npm...$(NC)"; \
+		npm --prefix . install next || true; \
+	else \
+		echo "$(YELLOW)npx not found and local next missing; attempting global install (may fail on Nix)...$(NC)"; \
+		npm install -g next || true; \
+	fi
 	@echo "$(GREEN)UI deps are in sync$(NC)"
 
 install-air: ## Install air for hot reloading (if not already installed)
-	@which air > /dev/null || (echo "$(YELLOW)Installing air for hot reloading...$(NC)" && go install github.com/air-verse/air@latest)
-	@echo "$(GREEN)Air is ready$(NC)"
+	@echo "$(YELLOW)Checking for air binary...$(NC)"
+	@if [ -x "$(AIR_BIN)" ]; then \
+		echo "$(GREEN)air is available at: $(AIR_BIN)$(NC)"; \
+	else \
+		echo "$(YELLOW)Installing air for hot reloading...$(NC)"; \
+		go install github.com/air-verse/air@latest; \
+		INSTALLED=$$(if [ -n "$(GOBIN)" ]; then echo "$(GOBIN)/air"; elif [ -n "$(GOPATH)" ]; then echo "$(GOPATH)/bin/air"; else echo "$$(go env GOBIN)/air"; fi); \
+		echo "$(GREEN)air installed (expected path: $$INSTALLED)$(NC)"; \
+		if ! which $$INSTALLED >/dev/null 2>&1 && [ ! -x "$$INSTALLED" ]; then \
+			echo "$(YELLOW)Note: the installed air binary may not be on your PATH. Add its directory to PATH to run 'make dev' without errors.$(NC)"; \
+		fi; \
+	fi
 
 install-gotestsum: ## Install gotestsum for test reporting (if not already installed)
 	@which gotestsum > /dev/null || (echo "$(YELLOW)Installing gotestsum for test reporting...$(NC)" && go install gotest.tools/gotestsum@latest)
@@ -97,7 +129,7 @@ dev: install-ui install-air setup-workspace ## Start complete development enviro
 	@sleep 3
 	@echo "$(YELLOW)Starting API server with UI proxy...$(NC)"
 	@$(MAKE) setup-workspace >/dev/null
-	@cd transports/bifrost-http && BIFROST_UI_DEV=true air -c .air.toml -- \
+	@cd transports/bifrost-http && BIFROST_UI_DEV=true $(AIR_BIN) -c .air.toml -- \
 		-host "$(HOST)" \
 		-port "$(PORT)" \
 		-log-style "$(LOG_STYLE)" \
