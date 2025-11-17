@@ -21,6 +21,7 @@ import (
 	"github.com/maximhq/bifrost/core/providers/bedrock"
 	"github.com/maximhq/bifrost/core/providers/cohere"
 	"github.com/maximhq/bifrost/core/providers/gemini"
+	"github.com/maximhq/bifrost/core/providers/huggingface"
 	"github.com/maximhq/bifrost/core/providers/mistral"
 	"github.com/maximhq/bifrost/core/providers/openai"
 	"github.com/maximhq/bifrost/core/providers/perplexity"
@@ -1315,6 +1316,8 @@ func (bifrost *Bifrost) createBaseProvider(providerKey schemas.ModelProvider, co
 		return gemini.NewGeminiProvider(config, bifrost.logger), nil
 	case schemas.OpenRouter:
 		return providers.NewOpenRouterProvider(config, bifrost.logger), nil
+	case schemas.HuggingFace:
+		return huggingface.NewHuggingFaceProvider(config, bifrost.logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", targetProviderKey)
 	}
@@ -2514,6 +2517,11 @@ func (bifrost *Bifrost) selectKeyFromProviderForModel(ctx *context.Context, requ
 				// For Vertex, check if deployment exists for this model
 				if len(key.VertexKeyConfig.Deployments) > 0 {
 					_, deploymentSupported = key.VertexKeyConfig.Deployments[model]
+				}
+			} else if baseProviderType == schemas.HuggingFace && key.HuggingFaceKeyConfig != nil {
+				// For Hugging Face, deployments allow aliasing models per key
+				if len(key.HuggingFaceKeyConfig.Deployments) > 0 {
+					_, deploymentSupported = key.HuggingFaceKeyConfig.Deployments[model]
 				}
 			}
 
