@@ -129,6 +129,14 @@ func (account *ComprehensiveTestAccount) GetKeysForProvider(ctx *context.Context
 				Weight: 1.0,
 			},
 		}, nil
+	case schemas.HuggingFace:
+		return []schemas.Key{
+			{
+				Value:  os.Getenv("HUGGINGFACE_API_KEY"),
+				Models: []string{"gpt2", "distilbert-base-uncased"},
+				Weight: 1.0,
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", providerKey)
 	}
@@ -514,7 +522,7 @@ func (s *ChatSession) SendMessage(message string) (string, error) {
 	s.history = append(s.history, *assistantMessage)
 
 	// Check if assistant wants to use tools
-	if assistantMessage.ToolCalls != nil && len(assistantMessage.ToolCalls) > 0 {
+	if len(assistantMessage.ToolCalls) > 0 {
 		return s.handleToolCalls(*assistantMessage)
 	}
 
@@ -522,7 +530,7 @@ func (s *ChatSession) SendMessage(message string) (string, error) {
 	var responseText string
 	if assistantMessage.Content.ContentStr != nil {
 		responseText = *assistantMessage.Content.ContentStr
-	} else if assistantMessage.Content.ContentBlocks != nil && len(assistantMessage.Content.ContentBlocks) > 0 {
+	} else if len(assistantMessage.Content.ContentBlocks) > 0 {
 		var textParts []string
 		for _, block := range assistantMessage.Content.ContentBlocks {
 			if block.Text != nil {
@@ -581,7 +589,7 @@ func (s *ChatSession) handleToolCalls(assistantMessage schemas.ChatMessage) (str
 			errorResult := schemas.ChatMessage{
 				Role: schemas.ChatMessageRoleTool,
 				Content: &schemas.ChatMessageContent{
-					ContentStr: bifrost.Ptr(fmt.Sprintf("Error executing tool: %v", err)),					
+					ContentStr: bifrost.Ptr(fmt.Sprintf("Error executing tool: %v", err)),
 				},
 				ChatToolMessage: &schemas.ChatToolMessage{
 					ToolCallID: toolCall.ID,
@@ -630,9 +638,9 @@ func (s *ChatSession) synthesizeToolResults() (string, error) {
 
 	// Create synthesis request
 	synthesisRequest := &schemas.BifrostChatRequest{
-		Input:    conversationWithSynthesis,
-		Params:   &schemas.ChatParameters{
-			Temperature: s.config.Temperature,
+		Input: conversationWithSynthesis,
+		Params: &schemas.ChatParameters{
+			Temperature:         s.config.Temperature,
 			MaxCompletionTokens: s.config.MaxTokens,
 		},
 	}
