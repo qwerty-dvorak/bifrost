@@ -40,4 +40,8 @@ go.work.sum
 # Test reports
 test-reports
 
+#executables
+*.exe
+bifrost-http
+
 .claude
