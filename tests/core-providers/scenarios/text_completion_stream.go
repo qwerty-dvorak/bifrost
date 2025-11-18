@@ -158,9 +158,13 @@ func RunTextCompletionStreamTest(t *testing.T, client *bifrost.Bifrost, ctx cont
 		// Enhanced validation expectations for text completion streaming
 		expectations := GetExpectationsForScenario("TextCompletionStream", testConfig, map[string]interface{}{})
 		expectations = ModifyExpectationsForProvider(expectations, testConfig.Provider)
-		expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, []string{"robot"}...) // Should include story elements
-		expectations.MinContentLength = 30                                                                    // Should be substantial content
-		expectations.MaxContentLength = 2000                                                                  // Reasonable upper bound
+		if testConfig.Provider != schemas.HuggingFace {
+			expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, "robot") // Should include story elements
+		} else {
+			expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, "paint", "painting") //Hugging face does not return the work robot, it usually names the robot itself and personifies it with names like "Rusty"
+		}
+		expectations.MinContentLength = 30   // Should be substantial content
+		expectations.MaxContentLength = 2000 // Reasonable upper bound
 
 		// Validate the consolidated text completion streaming response
 		validationResult := ValidateTextCompletionResponse(t, consolidatedResponse, nil, expectations, "TextCompletionStream")
