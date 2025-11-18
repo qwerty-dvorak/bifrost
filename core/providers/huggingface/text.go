@@ -50,8 +50,8 @@ func (provider *HuggingFaceProvider) TextCompletionStream(ctx context.Context, p
 	chatRequest := provider.convertTextToChatRequest(request)
 	effectiveChatRequest, resolvedModel := provider.prepareChatRequest(chatRequest, key)
 
-	// Make the streaming chat completion request with a converter that transforms responses
-	return openai.HandleOpenAIChatCompletionStreaming(
+	// Make the streaming chat completion request
+	chatStream, bifrostErr := openai.HandleOpenAIChatCompletionStreaming(
 		ctx,
 		provider.client,
 		provider.buildRequestURL(ctx, "/chat/completions", schemas.ChatCompletionStreamRequest),
@@ -63,7 +63,40 @@ func (provider *HuggingFaceProvider) TextCompletionStream(ctx context.Context, p
 		postHookRunner,
 		nil,
 		nil,
-		provider.chatToTextStreamConverter(request.Model, resolvedModel),
+		nil,
 		provider.logger,
 	)
+	if bifrostErr != nil {
+		return nil, bifrostErr
+	}
+
+	bufferSize := cap(chatStream)
+	if bufferSize == 0 {
+		bufferSize = 1
+	}
+
+	textStream := make(chan *schemas.BifrostStream, bufferSize)
+
+	go func() {
+		defer close(textStream)
+		for streamMsg := range chatStream {
+			if streamMsg == nil {
+				continue
+			}
+
+			if chatResp := streamMsg.BifrostChatResponse; chatResp != nil {
+				textResp := provider.convertChatToTextResponse(chatResp, request.Model, resolvedModel)
+				if textResp != nil {
+					textResp.ExtraFields.RequestType = schemas.TextCompletionStreamRequest
+					provider.decorateResponseMetadata(&textResp.ExtraFields, request.Model, resolvedModel)
+					streamMsg.BifrostTextCompletionResponse = textResp
+					streamMsg.BifrostChatResponse = nil
+				}
+			}
+
+			textStream <- streamMsg
+		}
+	}()
+
+	return textStream, nil
 }

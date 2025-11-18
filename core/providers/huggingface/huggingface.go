@@ -194,9 +194,13 @@ func (provider *HuggingFaceProvider) convertChatToTextResponse(chatResp *schemas
 
 	for i, choice := range chatResp.Choices {
 		text := ""
-		if choice.ChatNonStreamResponseChoice != nil && choice.ChatNonStreamResponseChoice.Message != nil &&
-			choice.ChatNonStreamResponseChoice.Message.Content != nil && choice.ChatNonStreamResponseChoice.Message.Content.ContentStr != nil {
+		switch {
+		case choice.ChatNonStreamResponseChoice != nil && choice.ChatNonStreamResponseChoice.Message != nil &&
+			choice.ChatNonStreamResponseChoice.Message.Content != nil && choice.ChatNonStreamResponseChoice.Message.Content.ContentStr != nil:
 			text = *choice.ChatNonStreamResponseChoice.Message.Content.ContentStr
+		case choice.ChatStreamResponseChoice != nil && choice.ChatStreamResponseChoice.Delta != nil &&
+			choice.ChatStreamResponseChoice.Delta.Content != nil:
+			text = *choice.ChatStreamResponseChoice.Delta.Content
 		}
 
 		textResp.Choices[i] = schemas.BifrostResponseChoice{
