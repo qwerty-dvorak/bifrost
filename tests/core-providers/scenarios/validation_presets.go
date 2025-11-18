@@ -352,6 +352,9 @@ func ModifyExpectationsForProvider(expectations ResponseExpectations, provider s
 		expectations.ShouldHaveModel = true
 		expectations.ShouldHaveUsageStats = true
 
+	case schemas.HuggingFace:
+		expectations.ShouldContainKeywords = nil
+
 	default:
 		// Keep default expectations
 	}

@@ -161,7 +161,7 @@ func RunTextCompletionStreamTest(t *testing.T, client *bifrost.Bifrost, ctx cont
 		if testConfig.Provider != schemas.HuggingFace {
 			expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, "robot") // Should include story elements
 		} else {
-			expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, "paint", "painting") //Hugging face does not return the work robot, it usually names the robot itself and personifies it with names like "Rusty"
+			expectations.ShouldContainKeywords = append(expectations.ShouldContainKeywords, "paint") //Hugging face does not return the word robot, it usually names the robot itself and personifies it with names like "Rusty"
 		}
 		expectations.MinContentLength = 30   // Should be substantial content
 		expectations.MaxContentLength = 2000 // Reasonable upper bound
